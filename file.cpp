@@ -5,18 +5,18 @@ int main(int argc, char* argv[])
     int y = 2;
     // x = y;
     x = y + 1;
-    // int z = y-4;
-    // return x;
+    z = y - 4;
+    return x;
 }
 
 // int plus(int a, int b)
 // {
-    // return 0;
-    // int x;
-    // int y = 2;
-    // x = y + 1;
-    // int z = y-4;
-    // return x;
+//     return 0;
+//     int x;
+//     int y = 2;
+//     x = y + 1;
+//     int z = y-4;
+//     return x;
 // }
 
 /*************************************************

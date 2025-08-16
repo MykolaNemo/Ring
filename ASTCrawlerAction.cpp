@@ -1,10 +1,23 @@
 #include "ASTCrawlerAction.h"
+#include "node.h"
+#include "binary_op.h"
+#include "compound_stmt_node.h"
+#include "decl_ref_expr.h"
+#include "decl_stmt.h"
+#include "expr_node.h"
+#include "function_decl.h"
+#include "implicit_cast_expr.h"
+#include "int_literal_expr.h"
+#include "return_stmt.h"
+#include "stmt_node.h"
+#include "var_decl.h"
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/NestedNameSpecifier.h"
 #include "clang/AST/ParentMapContext.h"
 #include "clang/AST/PrettyPrinter.h"
 #include "clang/Frontend/CompilerInstance.h"
-#include "llvm/Support/Casting.h"
+#include "executor.h"
+// #include "llvm/Support/Casting.h"
 
 #include <iostream>
 #include <string>
@@ -12,357 +25,56 @@
 
 using namespace clang;
 
-std::string parseExpression(Expr* expr, ASTContext* Context)
+namespace{
+
+NODE* translationUnitNode = nullptr;
+FUNCTION_DECL* mainFunctionNode = nullptr;
+std::vector<NODE*> allNodes;
+std::vector<VAR_DECL*> allVariables;
+
+int parseExpression(Expr* expr, ASTContext* Context)
 {
     if(isa<IntegerLiteral>(expr))
     {
         Expr::EvalResult eval_result;
         expr->EvaluateAsInt(eval_result, *Context);
-        return std::to_string(*eval_result.Val.getInt().getRawData());
+        std::cout<<"integer: "<<*eval_result.Val.getInt().getRawData()<<std::endl;
+        return *eval_result.Val.getInt().getRawData();
     }
     else
     {
-        std::cout<<"parseExpression error"<<std::endl;
+        std::cout<<"parseExpression error for "<<expr->getStmtClassName()<<std::endl;
     }
-    return {};
+    return 0;
 }
 
 std::string parseTypeName(QualType type)
 {
     if(type->isBuiltinType())
     {
-        BuiltinType const* builtin_type = static_cast<BuiltinType const*>(type.getTypePtr());
+        BuiltinType const* builtin_type = dyn_cast<BuiltinType>(type.getTypePtr());
         return builtin_type->getName(PrintingPolicy(LangOptions())).data();
     }
     else if(type->isIncompleteArrayType())
     {
-        IncompleteArrayType const* c_array_type = static_cast<IncompleteArrayType const*>(type.getTypePtr());
+        IncompleteArrayType const* c_array_type = dyn_cast<IncompleteArrayType>(type.getTypePtr());
         return std::string(parseTypeName(c_array_type->getElementType())) + "[]";
     }
     else if(type->isPointerType())
     {
-        PointerType const* pointer_type = static_cast<PointerType const*>(type.getTypePtr());
+        PointerType const* pointer_type = dyn_cast<PointerType>(type.getTypePtr());
         return std::string(parseTypeName(pointer_type->getPointeeType())) + "*";
     }
     return std::string("[TypeClassName:") + type->getTypeClassName() + "]";
 }
 
-// class AnyType
-// {
-//     // Support for LLVM-style RTTI (dyn_cast<> et al.)
-// public:
-//     enum TypeKind
-//     {
-//         AT_Undefined,
-//         AT_Int,
-//         AT_LAST_TYPE
-//     };
-//     AnyType() : kind(AT_Undefined) {}
-//     TypeKind getTypeKind() const { return kind; }
-//     static bool classof(const AnyType *N)
-//     {
-//         return (N->getTypeKind() >= AT_Undefined)
-//             && (N->getTypeKind() < AT_LAST_TYPE);
-//     }
-
-// protected:
-//     AnyType(TypeKind K) : kind(K) {}
-
-// private:
-//     const TypeKind kind;
-// };
-
-// class IntType
-// };
-
-namespace{
-
-class EXPR_NODE;
-
-class NODE
+void dumpTranslationUnit(ASTContext* context)
 {
-public:
-    virtual void addChild(NODE* child)
-    {
-        children.push_back(child);
-    }
-    DynTypedNode astNode;
-    NODE* parent = nullptr;
-
-protected:
-    std::vector<NODE*> children;
-
-// Support for LLVM-style RTTI (dyn_cast<> et al.)
-public:
-    enum NodeKind {
-        NK_UndefinedNode,
-        //Decl
-        NK_VarDecl,
-        NK_FunctionDecl,
-        NK_LAST_DECL,
-        //Stmt
-        NK_CompoundStmt,
-        NK_BinaryOp,
-        NK_LAST_STMT,
-        //Expr
-        NK_IntLiteralExpr,
-        NK_ImplicitCastExpr,
-        NK_DeclRefExpr,
-        NK_LAST_EXPR,
-        NK_LAST_NODE,
-    };
-    NODE() : kind(NK_UndefinedNode) {}
-    NodeKind getKind() const { return kind; }
-    static bool classof(const NODE *N)
-    {
-        return (N->getKind() >= NK_UndefinedNode)
-            && (N->getKind() < NK_LAST_NODE);
-    }
-
-protected:
-    NODE(NodeKind K) : kind(K) {}
-
-private:
-    const NodeKind kind;
-};
-
-class VAR_DECL_NODE: public NODE
-{
-public:
-    VAR_DECL_NODE(): NODE(NK_VarDecl){}
-    std::string name;
-    std::string type;
-    std::string m_value;
-    static bool classof(const NODE *N)
-    {
-        return N->getKind() == NK_VarDecl;
-    }
-};
-
-class FUNCTION_DECL_NODE: public NODE
-{
-public:
-    FUNCTION_DECL_NODE(): NODE(NK_FunctionDecl){}
-    std::string name;
-    std::string returnType;
-    std::vector<VAR_DECL_NODE*> parameters;
-    void addChild(NODE* child) override
-    {
-        children.push_back(child);
-        if(isa<VAR_DECL_NODE>(child))
-        {
-            parameters.push_back(dyn_cast<VAR_DECL_NODE>(child));
-        }
-    }
-    static bool classof(const NODE *N)
-    {
-        return N->getKind() == NK_FunctionDecl;
-    }
-};
-
-class STMT_NODE: public NODE
-{
-public:
-    virtual std::string execute() = 0;
-
-protected:
-    STMT_NODE(NodeKind K) : NODE(K) {}
-};
-
-class EXPR_NODE: public NODE
-{
-public:
-    virtual std::string value() const = 0;
-
-protected:
-    EXPR_NODE(NodeKind K) : NODE(K) {}
-};
-
-class COMPOUND_STMT_NODE: public STMT_NODE
-{
-public:
-    COMPOUND_STMT_NODE(): STMT_NODE(NK_CompoundStmt){}
-    static bool classof(const NODE *N)
-    {
-        return N->getKind() == NK_CompoundStmt;
-    }
-
-    std::vector<VAR_DECL_NODE*> localVars;
-    void addChild(NODE* child) override
-    {
-        children.push_back(child);
-        if(isa<VAR_DECL_NODE>(child))
-        {
-            localVars.push_back(dyn_cast<VAR_DECL_NODE>(child));
-        }
-    }
-
-    std::string execute() override
-    {
-        for(NODE* stmt : children)
-        {
-            static_cast<STMT_NODE*>(stmt)->execute();
-        }
-        return std::string();
-    }
-};
-
-
-class DECL_REF_EXPR : public EXPR_NODE
-{
-public:
-    DECL_REF_EXPR(): EXPR_NODE(NK_DeclRefExpr){}
-    static bool classof(const NODE *N)
-    {
-        return N->getKind() == NK_DeclRefExpr;
-    }
-
-    std::string value() const override
-    {
-        if(decl)
-        {
-            return decl->m_value;
-        }
-        return "";
-    }
-
-    void setValue(const std::string& v)
-    {
-        decl->m_value = v;
-    }
-
-    VAR_DECL_NODE* decl = nullptr;
-};
-
-
-class BINARY_OP_NODE: public STMT_NODE
-{
-public:
-    enum BinaryOpKind
-    {
-        BO_Assignment,
-        BO_Add
-    };
-    BINARY_OP_NODE(BinaryOpKind opKind): STMT_NODE(NK_BinaryOp), binOpKind(opKind) {}
-    static bool classof(const NODE *N)
-    {
-        return N->getKind() == NK_BinaryOp;
-    }
-
-    std::string execute() override
-    {
-        if(binOpKind == BO_Assignment)
-        {
-            if(isa<DECL_REF_EXPR>(lhs))
-            {
-                dyn_cast<DECL_REF_EXPR>(lhs)->setValue(rhs->value());
-            }
-            else
-            {
-                std::cout<<"Binary Operator execute error"<<std::endl;
-            }
-            return lhs->value();
-        }
-        else if(binOpKind == BO_Add)
-        {
-            return lhs->value() + rhs->value();
-        }
-        else
-        {
-            std::cout<<"Binary Operator execute error"<<std::endl;
-        }
-        return std::string();
-    }
-
-    void addChild(NODE* child) override
-    {
-        if(lhs && rhs)
-        {
-            std::cout<<"Can not assign more than 2 children to Binary operation"<<std::endl;
-            return;
-        }
-        children.push_back(child);
-        if(binOpKind == BO_Assignment)
-        {
-            if((lhs == nullptr) && isa<DECL_REF_EXPR>(child))
-            {
-                lhs = dyn_cast<DECL_REF_EXPR>(child);
-            }
-            else if((rhs == nullptr) && isa<EXPR_NODE>(child))
-            {
-                rhs = dyn_cast<EXPR_NODE>(child);
-            }
-        }
-        else if (binOpKind == BO_Add)
-        {
-            if((lhs == nullptr) && isa<EXPR_NODE>(child))
-            {
-                lhs = dyn_cast<EXPR_NODE>(child);
-            }
-            else if((rhs == nullptr) && isa<EXPR_NODE>(child))
-            {
-                rhs = dyn_cast<EXPR_NODE>(child);
-            }
-        }
-        else
-        {
-            std::cout<<"Can not assign a child to Binary operation: wrong type"<<std::endl;
-        }
-    }
-
-    const BinaryOpKind binOpKind;
-    EXPR_NODE* lhs = nullptr;
-    EXPR_NODE* rhs = nullptr;
-};
-
-class INT_LITERAL_EXPR : public EXPR_NODE
-{
-public:
-    INT_LITERAL_EXPR(int _v = 0):EXPR_NODE(NK_IntLiteralExpr),v(_v){}
-    static bool classof(const NODE *N)
-    {
-        return N->getKind() == NK_IntLiteralExpr;
-    }
-    std::string value() const override
-    {
-        return std::to_string(v);
-    };
-
-private:
-    int v;
-};
-
-class IMPLICIT_CAST_EXPR : public EXPR_NODE
-{
-public:
-    IMPLICIT_CAST_EXPR(): EXPR_NODE(NK_ImplicitCastExpr){}
-    static bool classof(const NODE *N)
-    {
-        return N->getKind() == NK_ImplicitCastExpr;
-    }
-    void addChild(NODE* child) override
-    {
-        children.push_back(child);
-        if(isa<DECL_REF_EXPR>(child))
-        {
-            decl = dyn_cast<DECL_REF_EXPR>(child);
-        }
-    }
-    std::string value() const override
-    {
-        if(decl)
-        {
-            return decl->value();
-        }
-        std::cout<<"IMPLICIT_CAST_EXPR: can not return value"<<std::endl;
-        return "";
-    }
-    DECL_REF_EXPR* decl = nullptr;
-};
-
-NODE* translationUnitNode = nullptr;
-std::vector<NODE*> allNodes;
-std::vector<VAR_DECL_NODE*> allVariables;
+    std::string str;
+    llvm::raw_string_ostream  stream(str);
+    translationUnitNode->astNode.dump(stream, *context);
+    std::cout<<str<<std::endl;
+}
 
 NODE* findDataNodeByASTNode(DynTypedNode astNode)
 {
@@ -415,7 +127,7 @@ inline bool addNode(NODE* dataNode, ASTContext* context, const NodeT &ASTNode)
             dataNode->parent = parentDataNode;
             return true;
         }
-        std::cout<<"-";
+        std::cout<<"addNode: can not find parent"<<std::endl;
     }
     else if(parentsList.size() > 1)
     {
@@ -455,7 +167,7 @@ bool ASTCrawlerVisitor::TraverseDecl(Decl *D)
         std::cout<<"...";
     }
 
-    if(llvm::isa<TranslationUnitDecl>(D))
+    if(isa<TranslationUnitDecl>(D))
     {
         std::cout<<"+";
         translationUnitNode = new NODE();
@@ -464,23 +176,43 @@ bool ASTCrawlerVisitor::TraverseDecl(Decl *D)
     else if(isa<FunctionDecl>(D))
     {
         std::cout<<"+";
-        FUNCTION_DECL_NODE* functionDeclNode = new FUNCTION_DECL_NODE();
+        FUNCTION_DECL* functionDeclNode = new FUNCTION_DECL();
 
-        FunctionDecl* func_decl = static_cast<FunctionDecl*>(D);
+        FunctionDecl* func_decl = dyn_cast<FunctionDecl>(D);
         functionDeclNode->returnType = parseTypeName(func_decl->getReturnType());
         functionDeclNode->name = func_decl->getName().data();
+        if(functionDeclNode->name == "main")
+        {
+            mainFunctionNode = functionDeclNode;
+        }
 
         addNode(functionDeclNode, Context, *D);
     }
     else if(isa<ParmVarDecl>(D))
     {
         std::cout<<"+";
-        VAR_DECL_NODE* varDataNode = new VAR_DECL_NODE();
+        VAR_DECL* varDataNode = new VAR_DECL();
 
-        ParmVarDecl* param_decl = static_cast<ParmVarDecl*>(D);
+        ParmVarDecl* param_decl = dyn_cast<ParmVarDecl>(D);
         varDataNode->name = param_decl->getName().data();
         varDataNode->type = parseTypeName(param_decl->getOriginalType());
 
+        addNode(varDataNode, Context, *D);
+    }
+    else if(isa<VarDecl>(D))
+    {
+        std::cout<<"+";
+
+        VarDecl* var_decl = dyn_cast<VarDecl>(D);
+
+        VAR_DECL* varDataNode = new VAR_DECL();
+        varDataNode->name = var_decl->getName().data();
+        varDataNode->type = parseTypeName(var_decl->getType());
+        Expr* init = var_decl->getInit();
+        if(init)
+        {
+            varDataNode->m_value = parseExpression(init, Context);
+        }
         addNode(varDataNode, Context, *D);
     }
     std::cout<<"[Decl]: "<<D->getDeclKindName()<<std::endl;
@@ -500,95 +232,69 @@ bool ASTCrawlerVisitor::TraverseStmt(Stmt *x, DataRecursionQueue *Queue)
     {
         paddingDebugString += "...";
     }
+    std::cout<<paddingDebugString;
 
     if(isa<CompoundStmt>(x))
     {
-        std::cout<<paddingDebugString<<"+";
+        std::cout<<"+";
         addNode(new COMPOUND_STMT_NODE(), Context, *x);
     }
     else if(isa<DeclStmt>(x))
     {
-        printName = false;
-        DeclStmt* decl_stmt = static_cast<DeclStmt*>(x);
-        std::vector<Decl*> declarations;
-        if(decl_stmt->isSingleDecl())
-        {
-            declarations.push_back(decl_stmt->getSingleDecl());
-        }
-        else
-        {
-            for(auto it = decl_stmt->decl_begin(); it != decl_stmt->decl_end(); ++it)
-            {
-                declarations.push_back(*it);
-            }
-        }
-        for(Decl* decl : declarations)
-        {
-            if(isa<VarDecl>(decl))
-            {
-                std::cout<<paddingDebugString<<"+";
-                VAR_DECL_NODE* varDataNode = new VAR_DECL_NODE();
-
-                VarDecl* var_decl = static_cast<VarDecl*>(decl);
-                varDataNode->name = var_decl->getNameAsString();
-                varDataNode->type = parseTypeName(var_decl->getType());
-
-                addNode(varDataNode, Context, *x);
-
-                Expr* initExpr = var_decl->getInit();
-                if(initExpr)
-                {
-                    varDataNode->m_value = parseExpression(initExpr, Context);
-                }
-                std::cout<<"[Stmt]: "<<x->getStmtClassName()<<std::endl;
-            }
-            else
-            {
-                std::cout<<"-";
-                addNode(new NODE(), Context, *x);
-            }
-        }
-        return true;
+        std::cout<<"+";
+        addNode(new DECL_STMT(), Context, *x);
     }
     else if(isa<BinaryOperator>(x))
     {
-        BinaryOperator* bin_op = static_cast<BinaryOperator*>(x);
-        if(bin_op->getOpcode() == BO_Assign)
-        {
-            std::cout<<paddingDebugString<<"+";
-            BINARY_OP_NODE* bin_op_node = new BINARY_OP_NODE(BINARY_OP_NODE::BO_Assignment);
-            addNode(bin_op_node, Context, *x);
-        }
-        else if(bin_op->getOpcode() == BO_Add)
-        {
-            std::cout<<paddingDebugString<<"+";
-            BINARY_OP_NODE* bin_op_node = new BINARY_OP_NODE(BINARY_OP_NODE::BO_Add);
-            addNode(bin_op_node, Context, *x);
-        }
-        else
-        {
-            std::cout<<"-";
-        }
+        std::cout<<"+";
+        BinaryOperator* bin_op = dyn_cast<BinaryOperator>(x);
+        addNode(new BINARY_OP(bin_op->getOpcode()), Context, *x);
     }
     else if(isa<DeclRefExpr>(x))
     {
-        std::cout<<paddingDebugString<<"+";
-        addNode(new DECL_REF_EXPR(), Context, *dyn_cast<DeclRefExpr>(x));
+        std::cout<<"+";
+        auto decl_ref_expr = new DECL_REF_EXPR();
+        addNode(decl_ref_expr, Context, *x);
+
+        ValueDecl* decl = dyn_cast<DeclRefExpr>(x)->getDecl();
+
+        if(decl)
+        {
+            NODE* var_decl_node = findDataNodeByASTNode(DynTypedNode::create(*decl));
+            if(var_decl_node && isa<VAR_DECL>(var_decl_node))
+            {
+                decl_ref_expr->decl = dyn_cast<VAR_DECL>(var_decl_node);
+                std::cout<<"[Stmt]: "<<x->getStmtClassName()<<std::endl;
+                return true;
+            }
+        }
     }
     else if(isa<ImplicitCastExpr>(x))
     {
-        std::cout<<paddingDebugString<<"+";
-        addNode(new IMPLICIT_CAST_EXPR(), Context, *dyn_cast<ImplicitCastExpr>(x));
+        std::cout<<"+";
+        addNode(new IMPLICIT_CAST_EXPR(), Context, *x);
     }
     else if(isa<IntegerLiteral>(x))
     {
-        std::cout<<paddingDebugString<<"+";
-
+        std::cout<<"+";
         IntegerLiteral* int_literal = dyn_cast<IntegerLiteral>(x);
         Expr::EvalResult eval_result;
-        int intValue = int_literal->EvaluateAsInt(eval_result, *Context);
-
+        int intValue = 0;
+        if(int_literal->EvaluateAsInt(eval_result, *Context) == 1)
+        {
+            intValue = *eval_result.Val.getInt().getRawData();
+        }
         addNode(new INT_LITERAL_EXPR(intValue), Context, *int_literal);
+    }
+    else if (isa<ReturnStmt>(x))
+    {
+        std::cout<<"+";
+
+        RETURN_STMT* return_stmt_node = new RETURN_STMT();
+        // EXPR_NODE* ret_expr_node = new EXPR_NODE();
+        // dyn_cast<ReturnStmt>(x)->getRetValue()
+        // return_stmt_node->return_expr = ret_expr_node;
+        addNode(return_stmt_node, Context, *x);
     }
 
     if(printName)
@@ -617,6 +323,9 @@ ASTCrawlerConsumer::ASTCrawlerConsumer(ASTContext *Context)
 void ASTCrawlerConsumer::HandleTranslationUnit(clang::ASTContext &Context)
 {
     Visitor.TraverseDecl(Context.getTranslationUnitDecl());
+    std::cout<<"call main: "<<mainFunctionNode<<std::endl;
+    mainFunctionNode->call();
+    // dumpTranslationUnit(&Context);
 }
 
 std::unique_ptr<clang::ASTConsumer> ASTCrawlerAction::CreateASTConsumer(

@@ -1,17 +1,19 @@
 #ifndef VAR_DECL_H
 #define VAR_DECL_H
 
-#include "node.h"
+#include "decl_node.h"
 
-class VAR_DECL: public NODE
+class VAR_DECL: public DECL_NODE
 {
 public:
     VAR_DECL();
     static bool classof(const NODE *N);
 
+    std::variant<int, bool> execute() override;
+
     std::string name;
-    std::string type;
-    int m_value = 0;
+    // std::string type;
+    std::variant<int, bool> m_value;
 };
 
 #endif // VAR_DECL_H

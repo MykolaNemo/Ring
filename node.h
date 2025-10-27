@@ -2,11 +2,15 @@
 #define NODE_H
 
 #include "clang/AST/ASTTypeTraits.h"
+#include <variant>
+#include <iostream>
 
 class NODE
 {
 public:
+    virtual ~NODE() = default;
     virtual void addChild(NODE* child);
+    virtual std::variant<int, bool> execute(){return std::variant<int, bool>();}
     
     std::vector<NODE*> children;
     clang::DynTypedNode astNode;
@@ -24,6 +28,7 @@ public:
 
         NK_FIRST_STMT,
         NK_BinaryOp,
+        NK_UnaryOp,
         NK_CompoundStmt,
         NK_DeclStmt,
         NK_ReturnStmt,
@@ -32,6 +37,7 @@ public:
         NK_IntLiteralExpr,
         NK_ImplicitCastExpr,
         NK_DeclRefExpr,
+        NK_ParenExpr,
         NK_LAST_EXPR,
 
         NK_LAST_STMT,
@@ -40,10 +46,10 @@ public:
     NODE();
     NodeKind getKind() const;
     static bool classof(const NODE *N);
-    
+
 protected:
     NODE(NodeKind K);
-    
+
 private:
     const NodeKind kind;
 };

@@ -1,12 +1,14 @@
 #include "ASTCrawlerAction.h"
 #include "node.h"
 #include "binary_op.h"
+#include "unary_op.h"
 #include "compound_stmt_node.h"
 #include "decl_ref_expr.h"
 #include "decl_stmt.h"
 #include "expr_node.h"
 #include "function_decl.h"
 #include "implicit_cast_expr.h"
+#include "paren_expr.h"
 #include "int_literal_expr.h"
 #include "return_stmt.h"
 #include "stmt_node.h"
@@ -16,8 +18,6 @@
 #include "clang/AST/ParentMapContext.h"
 #include "clang/AST/PrettyPrinter.h"
 #include "clang/Frontend/CompilerInstance.h"
-#include "executor.h"
-// #include "llvm/Support/Casting.h"
 
 #include <iostream>
 #include <string>
@@ -38,7 +38,7 @@ int parseExpression(Expr* expr, ASTContext* Context)
     {
         Expr::EvalResult eval_result;
         expr->EvaluateAsInt(eval_result, *Context);
-        std::cout<<"integer: "<<*eval_result.Val.getInt().getRawData()<<std::endl;
+        // std::cout<<"integer: "<<*eval_result.Val.getInt().getRawData()<<std::endl;
         return *eval_result.Val.getInt().getRawData();
     }
     else
@@ -195,7 +195,7 @@ bool ASTCrawlerVisitor::TraverseDecl(Decl *D)
 
         ParmVarDecl* param_decl = dyn_cast<ParmVarDecl>(D);
         varDataNode->name = param_decl->getName().data();
-        varDataNode->type = parseTypeName(param_decl->getOriginalType());
+        // varDataNode->type = parseTypeName(param_decl->getOriginalType());
 
         addNode(varDataNode, Context, *D);
     }
@@ -207,12 +207,7 @@ bool ASTCrawlerVisitor::TraverseDecl(Decl *D)
 
         VAR_DECL* varDataNode = new VAR_DECL();
         varDataNode->name = var_decl->getName().data();
-        varDataNode->type = parseTypeName(var_decl->getType());
-        Expr* init = var_decl->getInit();
-        if(init)
-        {
-            varDataNode->m_value = parseExpression(init, Context);
-        }
+        // varDataNode->type = parseTypeName(var_decl->getType());
         addNode(varDataNode, Context, *D);
     }
     std::cout<<"[Decl]: "<<D->getDeclKindName()<<std::endl;
@@ -250,6 +245,12 @@ bool ASTCrawlerVisitor::TraverseStmt(Stmt *x, DataRecursionQueue *Queue)
         BinaryOperator* bin_op = dyn_cast<BinaryOperator>(x);
         addNode(new BINARY_OP(bin_op->getOpcode()), Context, *x);
     }
+    else if(isa<UnaryOperator>(x))
+    {
+        std::cout<<"+";
+        UnaryOperator* unary_op = dyn_cast<UnaryOperator>(x);
+        addNode(new UNARY_OP(unary_op->getOpcode()), Context, *x);
+    }
     else if(isa<DeclRefExpr>(x))
     {
         std::cout<<"+";
@@ -263,7 +264,7 @@ bool ASTCrawlerVisitor::TraverseStmt(Stmt *x, DataRecursionQueue *Queue)
             NODE* var_decl_node = findDataNodeByASTNode(DynTypedNode::create(*decl));
             if(var_decl_node && isa<VAR_DECL>(var_decl_node))
             {
-                decl_ref_expr->decl = dyn_cast<VAR_DECL>(var_decl_node);
+                decl_ref_expr->var_decl = dyn_cast<VAR_DECL>(var_decl_node);
                 std::cout<<"[Stmt]: "<<x->getStmtClassName()<<std::endl;
                 return true;
             }
@@ -274,13 +275,18 @@ bool ASTCrawlerVisitor::TraverseStmt(Stmt *x, DataRecursionQueue *Queue)
         std::cout<<"+";
         addNode(new IMPLICIT_CAST_EXPR(), Context, *x);
     }
+    else if(isa<ParenExpr>(x))
+    {
+        std::cout<<"+";
+        addNode(new PAREN_EXPR(), Context, *x);
+    }
     else if(isa<IntegerLiteral>(x))
     {
         std::cout<<"+";
         IntegerLiteral* int_literal = dyn_cast<IntegerLiteral>(x);
         Expr::EvalResult eval_result;
         int intValue = 0;
-        if(int_literal->EvaluateAsInt(eval_result, *Context) == 1)
+        if(int_literal->EvaluateAsInt(eval_result, *Context))
         {
             intValue = *eval_result.Val.getInt().getRawData();
         }
@@ -290,11 +296,7 @@ bool ASTCrawlerVisitor::TraverseStmt(Stmt *x, DataRecursionQueue *Queue)
     {
         std::cout<<"+";
 
-        RETURN_STMT* return_stmt_node = new RETURN_STMT();
-        // EXPR_NODE* ret_expr_node = new EXPR_NODE();
-        // dyn_cast<ReturnStmt>(x)->getRetValue()
-        // return_stmt_node->return_expr = ret_expr_node;
-        addNode(return_stmt_node, Context, *x);
+        addNode(new RETURN_STMT(), Context, *x);
     }
 
     if(printName)
@@ -324,7 +326,7 @@ void ASTCrawlerConsumer::HandleTranslationUnit(clang::ASTContext &Context)
 {
     Visitor.TraverseDecl(Context.getTranslationUnitDecl());
     std::cout<<"call main: "<<mainFunctionNode<<std::endl;
-    mainFunctionNode->call();
+    std::cout<<"result: "<<std::get<int>(mainFunctionNode->execute())<<std::endl;
     // dumpTranslationUnit(&Context);
 }
 

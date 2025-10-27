@@ -4,20 +4,21 @@ project(AST_project)
 set(LLVM_PROJECT_PATH /home/mykola/Repos/llvm-project)
 set(CMAKE_LINKER_TYPE LLD)
 # set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_executable(ring main.cpp
-    ASTCrawlerAction.h
+        ASTCrawlerAction.h
         ASTCrawlerAction.cpp
 	node.h
 	node.cpp
+	stmt_node.h
+	expr_node.h
+	decl_node.h
 	var_decl.h
 	var_decl.cpp
 	function_decl.h
 	function_decl.cpp
-	stmt_node.h
-	expr_node.h
 	compound_stmt_node.h
 	compound_stmt_node.cpp
 	decl_stmt.h
@@ -32,11 +33,10 @@ add_executable(ring main.cpp
 	int_literal_expr.cpp
 	implicit_cast_expr.h
 	implicit_cast_expr.cpp
-	expr_factory.h
-	expr_factory.cpp
-	executor.h
-	executor.cpp
-	scope.h
+	paren_expr.cpp
+	paren_expr.h
+	unary_op.h
+	unary_op.cpp
     )
 
 target_compile_options(ring PUBLIC -fno-rtti -fno-exceptions)

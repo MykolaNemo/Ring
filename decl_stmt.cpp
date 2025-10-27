@@ -10,21 +10,22 @@ DECL_STMT::DECL_STMT() :
 
 }
 
+DECL_STMT::DECL_STMT(NodeKind kind) :
+    STMT_NODE(kind)
+{
+
+}
+
 bool DECL_STMT::classof(const NODE *N)
 {
     return N->getKind() == NK_DeclStmt;
 }
 
-int DECL_STMT::execute()
+std::variant<int, bool> DECL_STMT::execute()
 {
-    return 0;
-}
-
-void DECL_STMT::addChild(NODE *child)
-{
-    children.push_back(child);
-    if(isa<VAR_DECL>(child))
+    for(NODE* node : children)
     {
-        declarations.push_back(dyn_cast<VAR_DECL>(child));
+        node->execute();
     }
+    return std::variant<int, bool>();
 }

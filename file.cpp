@@ -1,12 +1,13 @@
 // float foo(int a);
 int main(int argc, char* argv[])
 {
-    int x,z;
+    int x=5,z;
     int y = 2;
-    // x = y;
-    x = y + 1;
-    z = y - 4;
-    return x;
+    x = y;
+    x = (y + 1);
+    z = x - 4;
+    int k = z*8/2;
+    return k*(-1*+k);
 }
 
 // int plus(int a, int b)

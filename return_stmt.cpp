@@ -1,5 +1,4 @@
 #include "return_stmt.h"
-#include "expr_node.h"
 #include <iostream>
 
 using namespace clang;
@@ -15,20 +14,11 @@ bool RETURN_STMT::classof(const NODE *N)
     return N->getKind() == NK_ReturnStmt;
 }
 
-int RETURN_STMT::execute()
+std::variant<int, bool> RETURN_STMT::execute()
 {
-    if(return_expr)
+    if(!children.empty())
     {
-        return return_expr->execute();
+        return children.at(0)->execute();
     }
-    return 0;
-}
-
-void RETURN_STMT::addChild(NODE *child)
-{
-    children.push_back(child);
-    if(!return_expr && isa<EXPR_NODE>(child))
-    {
-        return_expr = dyn_cast<EXPR_NODE>(child);
-    }
+    return std::variant<int, bool>();
 }

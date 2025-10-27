@@ -10,7 +10,7 @@ public:
 
     static bool classof(const NODE *N);
 
-    int execute() override;
+    std::variant<int, bool> execute() override;
 };
 
 #endif // COMPOUND_STMT_NODE_H

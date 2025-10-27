@@ -6,8 +6,6 @@
 class EXPR_NODE: public STMT_NODE
 {
 public:
-    // virtual std::string value() const = 0;
-    
     static bool classof(const NODE *N)
     {
         return (N->getKind() > NK_FIRST_EXPR)

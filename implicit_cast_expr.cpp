@@ -15,20 +15,11 @@ bool IMPLICIT_CAST_EXPR::classof(const NODE *N)
     return N->getKind() == NK_ImplicitCastExpr;
 }
 
-void IMPLICIT_CAST_EXPR::addChild(NODE *child)
+std::variant<int, bool> IMPLICIT_CAST_EXPR::execute()
 {
-    children.push_back(child);
-    if(isa<DECL_REF_EXPR>(child))
+    if(!children.empty())
     {
-        decl = dyn_cast<DECL_REF_EXPR>(child);
+        return children.at(0)->execute();
     }
-}
-
-int IMPLICIT_CAST_EXPR::execute()
-{
-    if(decl)
-    {
-        return decl->execute();
-    }
-    return 0;
+    return std::variant<int, bool>();
 }

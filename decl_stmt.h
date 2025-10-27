@@ -9,9 +9,11 @@ class DECL_STMT : public STMT_NODE
 public:
     DECL_STMT();
     static bool classof(const NODE *N);
-    int execute() override;
-    void addChild(NODE* child) override;
-    
+    std::variant<int, bool> execute() override;
+
+protected:
+    DECL_STMT(NodeKind K);
+
 private:
     std::vector<VAR_DECL*> declarations;
 };

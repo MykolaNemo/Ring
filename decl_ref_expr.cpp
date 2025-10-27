@@ -1,5 +1,4 @@
 #include "decl_ref_expr.h"
-#include "var_decl.h"
 #include <iostream>
 
 using namespace clang;
@@ -18,9 +17,9 @@ bool DECL_REF_EXPR::classof(const NODE *N)
 void DECL_REF_EXPR::addChild(NODE *child)
 {
     children.push_back(child);
-    if(!decl && isa<VAR_DECL>(child))
+    if(!var_decl && isa<VAR_DECL>(child))
     {
-        decl = dyn_cast<VAR_DECL>(child);
+        var_decl = dyn_cast<VAR_DECL>(child);
     }
     else
     {
@@ -28,19 +27,28 @@ void DECL_REF_EXPR::addChild(NODE *child)
     }
 }
 
-int DECL_REF_EXPR::execute()
+std::variant<int, bool> DECL_REF_EXPR::execute()
 {
-    if(decl)
+    if(var_decl)
     {
-        return decl->m_value;
+        return var_decl->m_value;
     }
-    return 0;
+    return std::variant<int, bool>();
 }
 
-void DECL_REF_EXPR::setValue(int v)
+void DECL_REF_EXPR::setValue(const std::variant<int, bool>& v)
 {
-    if(decl)
+    if(var_decl)
     {
-        decl->m_value = v;
+        var_decl->m_value = v;
     }
+}
+
+std::variant<int, bool> DECL_REF_EXPR::getValue() const
+{
+    if(var_decl)
+    {
+        return var_decl->m_value;
+    }
+    return std::variant<int, bool>();
 }

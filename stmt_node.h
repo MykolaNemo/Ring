@@ -6,8 +6,7 @@
 class STMT_NODE: public NODE
 {
 public:
-    virtual int execute() = 0;
-
+    virtual ~STMT_NODE() = default;
     static bool classof(const NODE *N)
     {
         return (N->getKind() > NK_FIRST_STMT)

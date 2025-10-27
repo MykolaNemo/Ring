@@ -13,13 +13,13 @@ public:
 
     static bool classof(const NODE *N);
 
-    int execute() override;
+    std::variant<int, bool> execute() override;
     void addChild(NODE* child) override;
 
 private:
     const clang::BinaryOperator::Opcode binOpCode;
-    STMT_NODE* lhs = nullptr;
-    STMT_NODE* rhs = nullptr;
+    NODE* lhs = nullptr;
+    NODE* rhs = nullptr;
 };
 
 #endif // BINARY_OP_H
